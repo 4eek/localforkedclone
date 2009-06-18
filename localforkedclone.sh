@@ -2,52 +2,83 @@
 
 # Automatic configuration for local Git repository from a project fork
 #
+# Rationale:
+# This method of forking helps minimise conflicts by encouraging pristine
+# tracking of upstream master and edge branches. It also promotes organised 
+# branching and encourages the frequent upstream assimilation of pull
+# requests. It does this by allowing easy tracking of the upstream master and
+# edge branches and providing a local development branch to submit pull
+# requests to upstream via GitHub's forking system which provides a nice
+# interface for managing pull requests.
+#
+# This script will create a local clone of the forked project Git repository
+# located on GitHub. The specified project fork will be added as an additional
+# remote repository and a new development branch created to track local
+# development.
+#
 # Requirements:
 # 1. working git installation
 # 2. project fork repository on GitHub
 # 
 # Usage:
-# setup_local_git [GitHub account name] [forked project name in your account] [account name of original forked project]
+# localforkedcone.sh <YOUR_GITHUB_ACCOUNT_NAME> <FORKED_PROJECT_NAME> <UPSTREAM_GITHUB_ACCOUNT_NAME> [YOUR_DEV_BRANCH=dev] [BRANCH_TO_TRACK=edge]
 #
-# This script will create a local clone of the forked project Git
-# repository located on GitHub.  The specified project fork will be
-# added as an addtional remote repository and a new "dev" branch created to
-# track local development.
-#
-# After the script is executed:
-# "git push" will push local commits to your dev branch
-# "git pull" will pull changes from the original project master branch into your local project
-#
+##
 # Original author: long @ insoshi who wrote a nice blog post about this at:
 # http://blog.insoshi.com/2008/10/14/setting-up-your-git-repositories-for-open-source-projects-at-github/
 #
 # Modifications by: Colin Surprenant, http://github.com/colinsurprenant, http://eventuallyconsistent.com/blog/
-
-
-# Verify number of arguments to script
+#                   Kevin Fourie, http://github.com/4eek, http://blog.4e.co.za
 #
-if [ $# -ne "3" ]
-then
-  echo "Usage: setup_local_git [GitHub account name] [forked project name in your account] [account name of original forked project]"
-  exit 1
-fi
-
-GITHUB_ACCOUNT="$1"
-MAIN_USER="$3"
-MAIN_PROJECT="$2"
-MAIN_REPOSITORY="git://github.com/$MAIN_USER/$MAIN_PROJECT.git"
-REMOTE="$GITHUB_ACCOUNT"
-REMOTE_URL="git@github.com:$GITHUB_ACCOUNT/$MAIN_PROJECT.git"
-BRANCH="dev"
 
 # Error handling function
 catch_error() {
   if [ $1 -ne "0" ]
   then
-    echo "ERROR encountered $2"
+    echo "ERROR encountered: $2"
     exit 1
   fi
 }
+
+USAGE="Usage: localforkedcone.sh <YOUR_GITHUB_ACCOUNT_NAME> <FORKED_PROJECT_NAME> <UPSTREAM_GITHUB_ACCOUNT_NAME> [YOUR_DEV_BRANCH=dev] [BRANCH_TO_TRACK=edge]"
+
+# Setup defaults if needed
+case $4 in
+'') DEV_BRANCH="dev" ;;
+*) DEV_BRANCH="$4" ;;
+esac
+case $5 in
+'') TRACK_BRANCH="edge" ;;
+*) TRACK_BRANCH="$5" ;;
+esac
+REMOTE="YOUR_GITHUB_ACCOUNT_NAME"
+
+# Print out the script help
+print_help() {
+echo
+echo "-- Quick Help --"
+echo "\"git push\" while having the *$DEV_BRANCH* branch checked out will push local commits to the $DEV_BRANCH, $TRACK_BRANCH and master branches of your forked repository."
+echo "\"git pull\" while having the *$TRACK_BRANCH* branch checked out will pull changes from the upstream $TRACK_BRANCH and master branches into your local $TRACK_BRANCH and master branches."
+echo
+}
+
+# Setup required params
+case $1 in
+'') echo $USAGE;print_help;exit 1 ;;
+*) GITHUB_ACCOUNT="$1" ;;
+esac
+case $2 in
+'') echo $USAGE;print_help;exit 1 ;;
+*) MAIN_PROJECT="$2" ;;
+esac
+case $3 in
+'') echo $USAGE;print_help;exit 1 ;;
+*) MAIN_USER="$3" ;;
+esac
+
+MAIN_REPOSITORY="git://github.com/$MAIN_USER/$MAIN_PROJECT.git"
+REMOTE="$GITHUB_ACCOUNT"
+REMOTE_URL="git@github.com:$GITHUB_ACCOUNT/$MAIN_PROJECT.git"
 
 # Clone official $MAIN_PROJECT repository
 #
@@ -64,14 +95,22 @@ echo
 #
 cd $MAIN_PROJECT
 
-# Create a local branch based off master
+# Create a local branch that tracks the forked edge/development branch
 #
-echo "Creating local branch [$BRANCH]..."
-git branch $BRANCH master
-catch_error $? "creating local branch [$BRANCH]"
+echo "Creating local tracking branch for [$TRACK_BRANCH]..."
+git branch --track $TRACK_BRANCH origin/$TRACK_BRANCH
+catch_error $? "creating local tracking branch for $TRACK_BRANCH"
 
-git checkout $BRANCH
-catch_error $? "checking out local branch [$BRANCH]"
+echo
+
+# Create a local branch based off $TRACK_BRANCH
+#
+echo "Creating local development branch $DEV_BRANCH..."
+git branch $DEV_BRANCH $TRACK_BRANCH
+catch_error $? "creating local branch $DEV_BRANCH"
+
+git checkout $DEV_BRANCH
+catch_error $? "checking out local branch $DEV_BRANCH"
 
 echo
 
@@ -79,9 +118,9 @@ echo
 #
 # The GitHub account name will be used to refer to this repository
 #
-echo "Adding remote [$REMOTE] to forked repository..."
+echo "Adding remote [$REMOTE] connection to forked repository..."
 git remote add $REMOTE $REMOTE_URL
-catch_error $? "adding remote [$REMOTE]"
+catch_error $? "adding remote $REMOTE"
 
 echo
 
@@ -89,7 +128,7 @@ echo
 #
 echo "Fetching remote branch information from [$REMOTE]..."
 git fetch $REMOTE
-catch_error $? "fetching branches from remote [$REMOTE]"
+catch_error $? "fetching branches from remote $REMOTE"
 
 echo
 
@@ -98,19 +137,21 @@ echo
 # We need to explicitly create the branch via a push command
 #
 echo "Pushing local branch [$BRANCH] to remote [$REMOTE]..."
-git push $REMOTE $BRANCH:refs/heads/$BRANCH
-catch_error $? "pushing local branch [$BRANCH] to remote [$REMOTE]"
+git push $REMOTE $DEV_BRANCH:refs/heads/$DEV_BRANCH
+catch_error $? "pushing local branch $DEV_BRANCH to remote $REMOTE"
 
 echo
 
 # Configure the remote connection for the local branch
 #
-echo "Configuring remote [$REMOTE] for local branch [$BRANCH]..."
+echo "Configuring remote [$REMOTE] for local branch [$DEV_BRANCH]..."
+git config branch.$DEV_BRANCH.remote $REMOTE
+catch_error $? "configuring remote $REMOTE for local branch $DEV_BRANCH"
+git config branch.$DEV_BRANCH.merge refs/heads/$DEV_BRANCH
+catch_error $? "configuring merge tracking for local branch $DEV_BRANCH"
 
-git config branch.$BRANCH.remote $REMOTE
-catch_error $? "configuring remote [$REMOTE] for local branch [$BRANCH]"
+echo
+echo "-- Finished clone configuration --"
+print_help
 
-git config branch.$BRANCH.merge refs/heads/$BRANCH
-catch_error $? "configuring merge tracking for local branch [$BRANCH]"
-
-exit 0
+exit $?
