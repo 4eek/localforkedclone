@@ -96,10 +96,13 @@ echo
 cd $MAIN_PROJECT
 
 # Create a local branch that tracks the forked edge/development branch
+# unless master was specified as the track branch
 #
-echo "Creating local tracking branch for [$TRACK_BRANCH]..."
-git branch --track $TRACK_BRANCH origin/$TRACK_BRANCH
-catch_error $? "creating local tracking branch for $TRACK_BRANCH"
+if [$TRACK_BRANCH != 'master']; then
+    echo "Creating local tracking branch for [$TRACK_BRANCH]..."
+    git branch --track $TRACK_BRANCH origin/$TRACK_BRANCH
+    catch_error $? "creating local tracking branch for $TRACK_BRANCH"
+fi
 
 echo
 
